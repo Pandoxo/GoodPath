@@ -45,18 +45,24 @@ int main(){
     cout <<"Loading test cases:\n";
     auto inputs = load_test_cases();
     int N,M,u,v;
-    *inputs[0] >> N>>M;
     int test_case = 0;
     for (auto& f : inputs) {
-        vector<vector<int>> adj(N);
+        int degree2 = 0;
         cout << "Test case " << test_case++ << ":\n";
         (*f) >> N >> M;
+        vector<vector<int>> adj(N);
         for (int i = 0; i < M; i++) {
             (*f) >> u >> v;
             adj[u].push_back(v);
             adj[v].push_back(u);
 
         }
+        for(int i=0;i<N;i++){
+            if(adj[i].size() == 2){
+                degree2 +=1;
+            }
+        }
+        cout << degree2 << endl;
     }
     
     return 0;
