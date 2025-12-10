@@ -9,6 +9,7 @@
 #include <random>
 #include <stack>
 #include <unordered_set>
+#include "util.h"
 namespace fs = std::filesystem;
 
 using namespace std;
@@ -21,36 +22,7 @@ struct Edge{
     int path_len;
 };
 
-auto load_test_cases() {
-    fs::path srcPath = __FILE__;
-    fs::path srcDir = srcPath.parent_path();
-    fs::path targetFolder = srcDir / "GP-samle-instances";
 
-    std::vector<fs::path> filePaths;
-    for (const auto& entry : fs::directory_iterator(targetFolder))
-        if (entry.is_regular_file())
-            filePaths.push_back(entry.path());
-
-    std::sort(filePaths.begin(), filePaths.end(),
-        [](const fs::path& a, const fs::path& b) {
-            return a.filename().string() < b.filename().string();
-        });
-
-    std::vector<std::unique_ptr<std::ifstream>> inputs;
-
-    int i = 0;
-    for (const auto& p : filePaths) {
-        auto f = std::make_unique<std::ifstream>(p);
-        if (!f->is_open()) {
-            std::cerr << "Failed to open " << p << "\n";
-            continue;
-        }
-            inputs.push_back(std::move(f));
-      
-        cout<<"Loaded "<<p<<"\n";
-    }
-    return std::move(inputs);
-}
 
 vector<int> bfs(vector<vector<int>>& adj, int N) {
     queue<int> q;
@@ -81,43 +53,11 @@ vector<int> bfs(vector<vector<int>>& adj, int N) {
         path.push_back(current);
         current = parents[current];
     }
+    reverse(path.begin(), path.end());
     return path;
     
 }
 
-// mask neighbours of nodes in path from start_index to end_index
-void mask_neighbours(
-    vector<vector<int>> &adj,
-    vector<int>& path,
-    unordered_set<int>& mask,
-    int start_index = 0,
-    int end_index = -1 ) {
-
-    for(int i=start_index; i < end_index;i++){
-        int node = path[i];
-        for(int neighbour : adj[node]) {
-            if(mask.find(neighbour) == mask.end()) {
-                mask.insert(neighbour);
-            }
-        }
-    }
-}
-
-//unamsk neighbors of a node, omitting certain index
-void unmask_neighbours(
-    vector<vector<int>> &adj,
-    vector<int>& path,
-    unordered_set<int>& mask,
-    int node,
-    int omit_index = -1) {
-
-    for(int neighbour : adj[node]) {
-        if(mask.find(neighbour) != mask.end() &&
-            neighbour != omit_index) {
-            mask.erase(neighbour);
-        }
-    }
-}
 
 //Greedy path . Choose next node among unmasked neighbors
 int extend_path(
@@ -150,10 +90,9 @@ int extend_path(
 }
 
 
-
-
 vector<bool> removed(1000000,0);
 vector<int> path_pool;
+
 
 void reduce_degree_two(vector<vector<Edge>> &adj,int n ) {
     queue<int> q;
@@ -215,26 +154,149 @@ void reduce_degree_two(vector<vector<Edge>> &adj,int n ) {
     }
 }
 
-// Reconstruct original path from reduced path of nodes
-vector<int> reconstruct_path( vector<vector<Edge>> &adj,const vector<int> &reduced_path) {
-    vector<int> full_path;
-    for (size_t i = 0; i + 1 < reduced_path.size(); i++) {
-        int u = reduced_path[i];
-        int v = reduced_path[i+1];
 
-        auto it = find_if(adj[u].begin(), adj[u].end(), [&]( Edge &e){ return e.to == v; });
-        if (it != adj[u].end()) {
-            full_path.push_back(u);
-            if (it->path_len > 0)
-                full_path.insert(full_path.end(),
-                    path_pool.begin() + it->path_start,
-                    path_pool.begin() + it->path_start + it->path_len);
-        } else {
-            full_path.push_back(u);
+// vector<int> find_cycle(
+//     vector<vector<int>> &adj,
+//     int start_node) {
+
+//     stack<pair<int,vector<int>>> s;
+//     s.push({start_node,{}});
+//     vector<int> path;
+
+//     while (!s.empty()) {
+//         auto [node,path] = s.top();
+//         s.pop();
+//         for(int neighbour : adj[node]){
+//             if(!check_if_neighbor_in_path(adj,path,neighbour)){
+//                 path.push_back(node);
+//                 path.push_back(neighbour);
+//                 return path;
+//         }
+//     }
+//     return {};
+// }
+// // Reconstruct original path from reduced path of nodes
+// vector<int> reconstruct_path( vector<vector<Edge>> &adj,const vector<int> &reduced_path) {
+//     vector<int> full_path;
+//     for (size_t i = 0; i + 1 < reduced_path.size(); i++) {
+//         int u = reduced_path[i];
+//         int v = reduced_path[i+1];
+
+//         auto it = find_if(adj[u].begin(), adj[u].end(), [&]( Edge &e){ return e.to == v; });
+//         if (it != adj[u].end()) {
+//             full_path.push_back(u);
+//             if (it->path_len > 0)
+//                 full_path.insert(full_path.end(),
+//                     path_pool.begin() + it->path_start,
+//                     path_pool.begin() + it->path_start + it->path_len);
+//         } else {
+//             full_path.push_back(u);
+//         }
+//     }
+//     full_path.push_back(reduced_path.back());
+//     return full_path;
+// }
+
+bool dfs_util(int node, int target,int depth,
+                vector<vector<int>>& adj,
+              unordered_set<int> mask,
+              vector<int>& path)
+{
+    mask.insert(node);
+    path.push_back(node);
+
+    if (depth> 20){
+        //backtrack
+        path.pop_back();
+        mask.erase(node);
+        return false;
+    }
+    if (node == target) {
+        return true; // found a path, stop immediately
+    }
+
+    for (int nei : adj[node]) {
+        if (mask.find(nei) == mask.end()) {
+            vector<int> omit = {node,target};
+            mask_neighbours(adj,node,mask,omit);
+            if (dfs_util(nei, target, depth+1, adj, mask, path)){
+                return true;  // propagate success upward
+            }
         }
     }
-    full_path.push_back(reduced_path.back());
-    return full_path;
+
+    //backtrack
+    path.pop_back();
+    mask.erase(node); 
+    return false;
+}
+vector<int> mergePathWithReroute( vector<int>& originalPath, const vector<int>& reroute) {
+    if (originalPath.empty() || reroute.empty()) {
+        return originalPath.empty() ? reroute : originalPath;
+    }
+    
+    // Find where reroute starts and ends in the original path
+    int rerouteStart = reroute.front();
+    int rerouteEnd = reroute.back();
+    
+    // Find positions in original path
+    int startPos = -1, endPos = -1;
+    
+    for (int i = 0; i < originalPath.size(); i++) {
+        if (originalPath[i] == rerouteStart) startPos = i;
+        if (originalPath[i] == rerouteEnd) endPos = i;
+    }
+    
+    // Ensure startPos comes before endPos
+    if (startPos > endPos) {
+        swap(startPos, endPos);
+    }
+    
+    vector<int> mergedPath;
+    
+    // Add path from beginning to start of reroute
+    for (int i = 0; i <= startPos; i++) {
+        mergedPath.push_back(originalPath[i]);
+    }
+    
+    // Add reroute (excluding first node to avoid duplicate)
+    for (int i = 1; i < reroute.size(); i++) {
+        mergedPath.push_back(reroute[i]);
+    }
+    
+    // Add remaining path from end of reroute
+    for (int i = endPos + 1; i < originalPath.size(); i++) {
+        mergedPath.push_back(originalPath[i]);
+    }
+    
+    return mergedPath;
+}
+
+//find path from start to target using DFS with masking
+vector<int> dfs_two_nodes(vector<vector<int>>& adj,int start, int target, unordered_set<int>& mask,vector<int>& curr_path) {
+    vector<int> path;
+    int omit_index = -1;
+    if(curr_path.size() >= 2 ){
+        int start_i_on_path = find(curr_path.begin(), curr_path.end(), start) - curr_path.begin(); 
+        omit_index= curr_path[start_i_on_path - 1];
+        unmask_neighbours(adj,mask,start,omit_index);
+        
+        int target_i_on_path = find(curr_path.begin(), curr_path.end(), target) - curr_path.begin();
+        omit_index = curr_path[max(target_i_on_path + 1,(int)path.size()-1)];
+        unmask_neighbours(adj,mask,target,omit_index);
+        mask.erase(start);
+        mask.erase(target);
+    }
+
+      cout << "\nMask after:\n";
+        for(int m : mask) {
+            cout << m << " ";
+        }
+
+
+
+    dfs_util(start, target,0, adj, mask, path);
+    return path;  
 }
 
 int main(){
@@ -259,16 +321,36 @@ int main(){
             adj[u].push_back(v);
             adj[v].push_back(u);
         }
-    
-        cout << "Test case " << test_case ++<< " nodes: " << N 
-            << ", edges: " << M << "\n";
-
-
-      
         
+        path = bfs(adj,N);
+        mask_neighbours_on_path(adj,path,mask,0,path.size());
+        cout<<"BFS Path: ";
+        for(int node : path) {
+            cout << node << " ";
+        }
+         cout << "\nMask before:\n";
+        for(int m : mask) {
+            cout << m << " ";
+        }
+       
+        unmask_neighbours_on_path(adj,path,mask,2,6);
+        for(int i = 2; i<6;i++){
+            mask.erase(path[i]);
+        }
+         cout << "\nMask after:\n";
+        for(int m : mask) {
+            cout << m << " ";
+        }
+
+        cout << "\nDFS Path: ";
+
+        vector<int> curr_path = dfs_two_nodes(adj,2,6,mask,path);
+        for(int node : curr_path) {
+            cout << node << " ";
+        }  
+        cout << "\n";
+        break;
         //cout<<"Test case "<<test_case++<<": Path length = "<<path.size()<<"\n";
-    
-    }
-    
+    }  
     return 0;
 }
