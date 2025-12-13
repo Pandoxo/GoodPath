@@ -399,47 +399,40 @@ PathValidationResult validate_path_detailed(const vector<int>& path,
 }
 
 int main(){
-
-    srand(time(0));
-
-    cout <<"Loading test cases:\n";
-    auto inputs = load_test_cases();
+    ios::sync_with_stdio(false);
+    cin.tie(0);
     int N,M,u,v;
-    int test_case = -1;
+    cin >> N >> M;
+
+    vector<vector<Edge>> adj(N);
+    vector<int> visited(N,0);
+    vector<int> path;
+    path.reserve(N);
     
-    for (auto& f : inputs) {
-        (*f) >> N >> M;
+    for (int i = 0; i < M; i++) {
+        cin >> u >> v;
+        adj[u].push_back({v,1});
+        adj[v].push_back({u,1});
+    }
 
-        vector<vector<Edge>> adj(N);
-        vector<int> visited(N,0);
-        vector<int> path;
-        path.reserve(N);
-        
-        for (int i = 0; i < M; i++) {
-            (*f) >> u >> v;
-            adj[u].push_back({v,1});
-            adj[v].push_back({u,1});
+    vector<int> longest_path;
+    srand(time(0));
+    int max_lenght = find_longest_path(0, adj,visited, longest_path);
+
+    for(int i=0;i<10;i++){
+        int start = rand() % N;
+        fill(visited.begin(),visited.end(),0);
+        int length = find_longest_path(start, adj,visited, longest_path);
+        if(length > max_lenght){
+            max_lenght = length;
         }
-
-        vector<int> longest_path;
-        srand(time(0));
-        cout << "Test case: " << test_case++ <<  " size: "<< adj.size()<< "\n";
-        int max_lenght = find_longest_path(0, adj,visited, longest_path);
-        cout << "Longest path length from 0: " << max_lenght << endl;
-
-        for(int i=0;i<10;i++){
-            int start = rand() % N;
-            fill(visited.begin(),visited.end(),0);
-            int length = find_longest_path(start, adj,visited, longest_path);
-            if(length > max_lenght){
-                max_lenght = length;
-            }
-        }
-        cout << "Longest path length from rand: " << max_lenght << endl;
+    }
+    cout << path.size();
+    for(int n: path){
+        cout << n << " ";
+    }
+    
         
-        PathValidationResult result = validate_path_detailed(longest_path,adj);
-        cout << result.error_message << "\n";
-        
-    }  
+      
     return 0;
 }
