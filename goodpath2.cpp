@@ -249,7 +249,7 @@ void printGraph(const vector<vector<Edge>>& graph) {
 }
 
 // BFS from a start node to find the furthest node and return the path
-pair<int, vector<int>> bfsFurthest(const vector<vector<Edge>>& graph, int start) {
+pair<int, vector<int>> bfsFurthest(const vector<vector<Edge>>& graph,vector<int>& visited, int start) {
     int n = graph.size();
     vector<int> dist(n, -1);
     vector<int> parent(n, -1);
@@ -267,7 +267,7 @@ pair<int, vector<int>> bfsFurthest(const vector<vector<Edge>>& graph, int start)
         
         for (const auto& edge : graph[u]) {
             int v = edge.to;
-            if (dist[v] == -1) {  // Not visited
+            if (dist[v] == -1 && visited[v] == 0) {  // Not visited
                 dist[v] = dist[u] + 1;
                 parent[v] = u;
                 q.push(v);
@@ -285,6 +285,7 @@ pair<int, vector<int>> bfsFurthest(const vector<vector<Edge>>& graph, int start)
     int curr = furthestNode;
     while (curr != -1) {
         path.push_back(curr);
+        visited[curr] = -1;
         curr = parent[curr];
     }
     reverse(path.begin(), path.end());
@@ -308,6 +309,54 @@ int getRandomActiveNode(const vector<vector<Edge>>& graph) {
     return activeNodes[randomIdx];
 }
 
+// Mark neighbours of nodes in path from start_index to end_index (inclusive)
+void visit_neighbours(
+    const vector<vector<Edge>>& adj,
+    vector<int>& visited,
+    const vector<int>& path,
+    int start, int end) {
+
+    for(int i = start; i <= end; i++) {
+        for(const Edge& e : adj[path[i]]) {
+            visited[e.to] += 1;
+        }
+    }
+    // Mark nodes on path as visited (value 1)
+    for(int i = start; i <= end; i++) {
+        visited[path[i]] = 1;
+    }
+}
+
+// Unmark neighbours of nodes in path from start_index to end_index (inclusive)
+void unvisit_neighbours(
+    const vector<vector<Edge>>& adj,
+    vector<int>& visited,
+    const vector<int>& path,
+    int start, int end) {
+
+    for(int i = start; i <= end; i++) {
+        for(const Edge& e : adj[path[i]]) {
+            visited[e.to] -= 1;
+        }
+    }
+    
+    // Unmark nodes on path
+    for(int i = start; i <= end; i++) {
+        visited[path[i]] = 0;
+    }
+}
+
+void extend_path(vector<int>& path1, vector<int>& path2) {
+    if(path2.size() <= 1){
+        return;
+    }
+    
+    size_t elementsToAdd = path2.size() - 1;
+    path1.reserve(path1.size() + elementsToAdd);
+    path1.insert(path1.end(), path2.begin() + 1, path2.end());
+}
+
+
 int main() {
     srand(time(0));
     
@@ -321,7 +370,7 @@ int main() {
         
         vector<vector<Edge>> adj(N);
         vector<int> path;
-        vector<int> visited(N,0);
+        vector<int> visited(N, 0);
         path.reserve(N);
         
         for (int i = 0; i < M; i++) {
@@ -330,35 +379,64 @@ int main() {
             adj[v].push_back(Edge(u, 1));
         }
         
-        cout << "Processing test case " << test_case++ << ":\n";
-        cout << "Graph size before reduction: " << N << " nodes, " << M << " edges\n";
+        auto [_,path2] = bfsFurthest(adj,visited,0);
+        cout << path2.size()<<"\n";
+
+        // cout << "\nProcessing test case " << test_case++ << ":\n";
+        // cout << "Graph size before reduction: " << N << " nodes, " << M << " edges\n";
         
-        // Use the version with info for path reconstruction
-        auto reductionInfo = reduceGraphWithInfo(adj);
-        int activeNodes = countActiveNodes(reductionInfo.graph);
-        int removedNodes = N - activeNodes;
+        // auto reductionInfo = reduceGraphWithInfo(adj);
+        // int activeNodes = countActiveNodes(reductionInfo.graph);
+        // int removedNodes = N - activeNodes;
+
+        // vector<vector<Edge>>& reducedGraph = reductionInfo.graph;
         
-        cout << "Graph size after reduction: " << activeNodes << " active nodes (removed " 
-             << removedNodes << " nodes)\n";
+        // cout << "Graph size after reduction: " << activeNodes << " active nodes (removed " 
+        //      << removedNodes << " nodes)\n\n";
         
-        // BFS from random node to find furthest node
-        int randomStart = getRandomActiveNode(reductionInfo.graph);
-        if (randomStart != -1) {
-            auto [furthestNode, reducedPath] = bfsFurthest(reductionInfo.graph, randomStart);
+        // // BFS from random node to find furthest node
+        // int start = getRandomActiveNode(reducedGraph);
+        
+        // cout << "\n";
+        
+        // int i = 0;
+        // while(true) {
+        //     auto [furthestNode, bfspath] = bfsFurthest(reducedGraph, visited, start);
             
-            cout << "BFS from random node " << randomStart << " to furthest node " << furthestNode << "\n";
-            cout << "Path length on reduced graph: " << reducedPath.size() << " nodes\n";
+        //     if(bfspath.size() == 1) {
+        //         cout << "No path found from node " << start << "\n";
+        //         break;
+        //     }
             
-            // Expand the path to include removed nodes
-            vector<int> fullPath = expandPath(reducedPath, reductionInfo);
-            cout << "Path length on original graph: " << fullPath.size() << " nodes\n";
+        //     int oldPathSize = path.size();
+        //     extend_path(path, bfspath);
             
-         
-        }
+        //     // For first iteration: mark neighbors of start node (index 0)
+        //     if(i == 0) {
+        //         visit_neighbours(reducedGraph, visited, path, 0, 0);
+        //     }
+            
+        //     // Unmark neighbors of previous end node (now it's not the end anymore)
+        //     if(oldPathSize > 0) {
+        //         unvisit_neighbours(reducedGraph, visited, path, oldPathSize - 1, oldPathSize - 1);
+        //     }
+            
+        //     // Mark neighbors of newly added nodes (except the new end node)
+        //     if(path.size() > oldPathSize + 1) {
+        //         visit_neighbours(reducedGraph, visited, path, oldPathSize, path.size() - 2);
+        //     }
+            
+        //     start = path.back();
+        //     i++;
+        // }
         
-        // Optional: compact the graph
-        auto compactResult = compactGraph(reductionInfo.graph);
-        cout << "Compacted graph size: " << compactResult.first.size() << " nodes\n\n";
+        // // After all iterations, mark neighbors of the final end node
+        // if(!path.empty()) {
+        //     visit_neighbours(reducedGraph, visited, path, path.size() - 1, path.size() - 1);
+        // }
+        
+        //cout << "Path size: " << expandPath(path,reductionInfo).size() << endl;
+        
     }  
 
     return 0;
