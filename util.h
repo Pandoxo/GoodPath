@@ -5,6 +5,7 @@
 #include <fstream>
 #include <filesystem>
 #include <climits>
+#include <map>
 #include <random>
 
 
@@ -13,99 +14,272 @@ using namespace std;
 
 
 
-//check if any neighbor of node is in path
-bool check_if_neighbor_in_path(
-    vector<vector<int>> &adj,
-    vector<int>& path,
-    int node) {
+struct Edge {
+    int to;
+    int weight;
+    
+    Edge(int t, int w) : to(t), weight(w) {}
+};
 
-    for(int neighbour : adj[node]) {
-        if(find(path.begin(), path.end(), neighbour) != path.end()) {
-            return true;
-        }
+
+struct ReductionInfo {
+    vector<vector<Edge>> graph;           // The reduced graph
+    vector<bool> removed;                 // Which nodes were removed
+    vector<pair<int, int>> replacedEdge;  // For each removed node: (neighbor1, neighbor2)
+    map<pair<int, int>, vector<int>> edgeChains; // Map from edge to removed nodes IN ORDER
+};
+
+// Returns the reduced graph with removal information for path reconstruction
+ReductionInfo reduceGraphWithInfo(const vector<vector<Edge>>& adjList) {
+    int n = adjList.size();
+    vector<vector<Edge>> graph = adjList;
+    vector<bool> removed(n, false);
+    vector<int> degree(n);
+    vector<pair<int, int>> replacedEdge(n, {-1, -1});
+    
+    // Map from edge (u,v) to ORDERED chain of removed nodes between them
+    map<pair<int, int>, vector<int>> edgeToChain;
+    
+    // Initialize degrees
+    for (int i = 0; i < n; i++) {
+        degree[i] = graph[i].size();
     }
-    return false;
-}
-
-//check if any neighbor of node is in mask
-bool check_if_neighbor_in_mask(
-    vector<vector<int>> &adj,
-    unordered_set<int>& mask,
-    int node) {
-
-    for(int neighbour : adj[node]) {
-        if(mask.find(neighbour) != mask.end()) {
-            return true;
-        }
-    }
-    return false;
-}
-
-
-//unamsk neighbors of a node, omitting certain index
-void unmask_neighbours(
-    vector<vector<int>> &adj,
-    unordered_set<int>& mask,
-    int node,
-    int omit_index = -1) {
-
-    for(int neighbour : adj[node]) {
-        if(mask.find(neighbour) != mask.end() &&
-            neighbour != omit_index) {
-            mask.erase(neighbour);
-        }
-    }
-}
-// unmask neighbours of nodes in path from start_index to end_index (exclusive)
-void unmask_neighbours_on_path(
-    vector<vector<int>> &adj,
-    vector<int>& path,
-    unordered_set<int>& mask,
-    int start_index = 0,
-    int end_index = -1 ) {
-
-    for(int i=start_index; i < end_index;i++){
-        int node = path[i];
-        for(int neighbour : adj[node]) {
-            if(mask.find(neighbour) == mask.end() &&
-             find(path.begin(), path.end(), neighbour) == path.end()) {
-                mask.erase(neighbour);
+    
+    // Process all degree-2 nodes
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        
+        for (int node = 0; node < n; node++) {
+            if (removed[node] || degree[node] != 2) continue;
+            
+            // Get the two neighbors
+            int n1 = -1, n2 = -1, w1 = 0, w2 = 0;
+            for (const auto& edge : graph[node]) {
+                if (!removed[edge.to]) {
+                    if (n1 == -1) {
+                        n1 = edge.to;
+                        w1 = edge.weight;
+                    } else {
+                        n2 = edge.to;
+                        w2 = edge.weight;
+                        break;
+                    }
+                }
             }
-        }
-    }
-}
-
-// mask neighbours of nodes in path from start_index to end_index (exclusive)
-void mask_neighbours_on_path(
-    vector<vector<int>> &adj,
-    vector<int>& path,
-    unordered_set<int>& mask,
-    int start_index = 0,
-    int end_index = -1 ) {
-
-    for(int i=start_index; i < end_index;i++){
-        int node = path[i];
-        for(int neighbour : adj[node]) {
-            if(mask.find(neighbour) == mask.end()) {
-                mask.insert(neighbour);
+            
+            // Skip if we don't have exactly 2 valid neighbors or self-loop
+            if (n1 == -1 || n2 == -1 || n1 == n2) continue;
+            
+            int newWeight = w1 + w2;
+            
+            // Store the removed node's connections for path reconstruction
+            replacedEdge[node] = {n1, n2};
+            
+            // Build the ordered chain between n1 and n2
+            auto minmax_pair = minmax(n1, n2);
+            vector<int> newChain;
+            
+            // Check if there's already a chain from n1 to node
+            auto it1 = edgeToChain.find(minmax(n1, node));
+            if (it1 != edgeToChain.end()) {
+                // There's an existing chain between n1 and node
+                if (n1 < node) {
+                    newChain = it1->second;
+                } else {
+                    newChain = it1->second;
+                    reverse(newChain.begin(), newChain.end());
+                }
+                edgeToChain.erase(it1);
             }
-        }
-    }
-}
-// mask neighbours of nodes in path from start_index to end_index (exclusive)
-void mask_neighbours(
-    vector<vector<int>> &adj,
-    int node,
-    unordered_set<int>& mask,
-    vector<int>& omit) {
-
-    for(int neighbour : adj[node]) {
-        if(mask.find(neighbour) == mask.end() && find(omit.begin(), omit.end(), neighbour) == omit.end()) {
-            mask.insert(neighbour);
+            
+            // Add the current node
+            newChain.push_back(node);
+            
+            // Check if there's already a chain from node to n2
+            auto it2 = edgeToChain.find(minmax(node, n2));
+            if (it2 != edgeToChain.end()) {
+                // There's an existing chain between node and n2
+                if (node < n2) {
+                    newChain.insert(newChain.end(), it2->second.begin(), it2->second.end());
+                } else {
+                    auto reversed = it2->second;
+                    reverse(reversed.begin(), reversed.end());
+                    newChain.insert(newChain.end(), reversed.begin(), reversed.end());
+                }
+                edgeToChain.erase(it2);
+            }
+            
+            // Store the new chain (always in order from min to max endpoint)
+            if (n1 > n2) {
+                reverse(newChain.begin(), newChain.end());
+            }
+            edgeToChain[minmax_pair] = newChain;
+            
+            // Remove edges from neighbors to this node and update degrees
+            for (auto& edge : graph[n1]) {
+                if (edge.to == node) {
+                    edge.to = -1; // Mark for removal
+                    degree[n1]--;
+                    break;
+                }
+            }
+            
+            for (auto& edge : graph[n2]) {
+                if (edge.to == node) {
+                    edge.to = -1; // Mark for removal
+                    degree[n2]--;
+                    break;
+                }
+            }
+            
+            // Add or update edge between n1 and n2
+            bool foundEdge = false;
+            for (auto& edge : graph[n1]) {
+                if (edge.to == n2) {
+                    edge.weight = newWeight;
+                    foundEdge = true;
+                    break;
+                }
+            }
+            if (!foundEdge) {
+                graph[n1].push_back(Edge(n2, newWeight));
+                degree[n1]++;
+            }
+            
+            foundEdge = false;
+            for (auto& edge : graph[n2]) {
+                if (edge.to == n1) {
+                    edge.weight = newWeight;
+                    foundEdge = true;
+                    break;
+                }
+            }
+            if (!foundEdge) {
+                graph[n2].push_back(Edge(n1, newWeight));
+                degree[n2]++;
+            }
+            
+            // Mark node as removed
+            removed[node] = true;
+            degree[node] = 0;
+            changed = true;
         }
     }
     
+    // Clean up: remove marked edges (to == -1) and clear removed nodes
+    for (int i = 0; i < n; i++) {
+        if (removed[i]) {
+            graph[i].clear();
+        } else {
+            graph[i].erase(
+                remove_if(graph[i].begin(), graph[i].end(),
+                          [](const Edge& e) { return e.to == -1; }),
+                graph[i].end()
+            );
+        }
+    }
+    
+    return {graph, removed, replacedEdge, edgeToChain};
 }
+
+// Wrapper that returns just the graph (for backward compatibility)
+vector<vector<Edge>> reduceGraph(const vector<vector<Edge>>& adjList) {
+    return reduceGraphWithInfo(adjList).graph;
+}
+
+vector<int> expandPath(const vector<int>& reducedPath, const ReductionInfo& info) {
+    if (reducedPath.size() < 2) return reducedPath;
+    
+    vector<int> fullPath;
+    fullPath.push_back(reducedPath[0]);
+    
+    for (size_t i = 0; i < reducedPath.size() - 1; i++) {
+        int u = reducedPath[i];
+        int v = reducedPath[i + 1];
+        
+        // Create the edge key (always use min, max order)
+        pair<int, int> edge = minmax(u, v);
+        
+        // Check if there were removed nodes between u and v
+        auto it = info.edgeChains.find(edge);
+        if (it != info.edgeChains.end()) {
+            const vector<int>& chain = it->second;
+            
+            // Add the chain of removed nodes in correct order
+            // Chain is stored in order from min(u,v) to max(u,v)
+            if (u < v) {
+                // Going forward through the chain
+                for (int node : chain) {
+                    fullPath.push_back(node);
+                }
+            } else {
+                // Going backward through the chain
+                for (int j = chain.size() - 1; j >= 0; j--) {
+                    fullPath.push_back(chain[j]);
+                }
+            }
+        }
+        
+        fullPath.push_back(v);
+    }
+    
+    return fullPath;
+}
+
+int countActiveNodes(const vector<vector<Edge>>& graph) {
+    int count = 0;
+    for (const auto& adj : graph) {
+        if (!adj.empty()) count++;
+    }
+    return count;
+}
+
+// Compact the graph by removing nodes with empty adjacency lists
+// Returns pair: <compacted graph, mapping from old to new indices>
+pair<vector<vector<Edge>>, vector<int>> compactGraph(const vector<vector<Edge>>& graph) {
+    int n = graph.size();
+    vector<int> oldToNew(n, -1);
+    int newIdx = 0;
+    
+    // Create mapping from old to new indices
+    for (int i = 0; i < n; i++) {
+        if (!graph[i].empty()) {
+            oldToNew[i] = newIdx++;
+        }
+    }
+    
+    // Build compacted graph
+    vector<vector<Edge>> compacted(newIdx);
+    for (int i = 0; i < n; i++) {
+        if (!graph[i].empty()) {
+            int newI = oldToNew[i];
+            for (const auto& edge : graph[i]) {
+                compacted[newI].push_back(Edge(oldToNew[edge.to], edge.weight));
+            }
+        }
+    }
+    
+    return {compacted, oldToNew};
+}
+
+
+int getRandomActiveNode(const vector<vector<Edge>>& graph) {
+    vector<int> activeNodes;
+    for (int i = 0; i < graph.size(); i++) {
+        if (!graph[i].empty()) {
+            activeNodes.push_back(i);
+        }
+    }
+    
+    if (activeNodes.empty()) return -1;
+    
+    int randomIdx = rand() % activeNodes.size();
+    return activeNodes[randomIdx];
+}
+
+
+
 
 auto load_test_cases() {
     fs::path srcPath = __FILE__;

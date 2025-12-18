@@ -9,133 +9,27 @@
 #include <random>
 #include <stack>
 #include <unordered_set>
-#include "util.h"
 namespace fs = std::filesystem;
 
 using namespace std;
 
-
-struct Edge{
+struct Edge {
     int to;
     int weight;
+    
+    Edge(int t, int w) : to(t), weight(w) {}
 };
 
 
 
-vector<int> bfs(vector<vector<int>>& adj, int N) {
-    queue<int> q;
-    vector<bool> visited(N, false);
-    //vector<int> distances(N,0);
-    vector<int> parents(N,-1);
-    q.push(0);
-    visited[0] = true;
-    int count = 1;  
-
-    while(!q.empty()) {
-        int node = q.front();
-        q.pop();
-
-        for(int neighbour : adj[node]) {
-            if(!visited[neighbour]) {
-                visited[neighbour] = true;
-                parents[neighbour] = node;
-                q.push(neighbour);
-                count++;
-            }
-        }
-    }
-    //reconstruct path
-    vector<int> path;
-    int current = N-1;
-    while(current != -1) {
-        path.push_back(current);
-        current = parents[current];
-    }
-    reverse(path.begin(), path.end());
-    return path;
-    
-}
 
 
 //Greedy path . Choose next node among unmasked neighbors
-int extend_path(
-    vector<vector<int>> &adj,
-    vector<int>& path,
-    unordered_set<int>& mask) {
 
-    int current_node = path.back();
-
-    int next_node = -1;
-    int min_degree = INT_MAX;
-
-    for(int neighbour : adj[current_node]) {
-        if(mask.find(neighbour) == mask.end()) {
-            next_node = neighbour;
-            break;
-        }
-    }
-
-    if(next_node != -1) {
-        for(int neighbour : adj[current_node]) {
-            mask.insert(neighbour);
-        }
-        path.push_back(next_node);
-    }else{
-        mask.insert(current_node);
-        path.pop_back();
-    }
-    return next_node;
-}
 
 
 vector<bool> removed(1000000,0);
 vector<int> path_pool;
-
-
-
-// vector<int> find_cycle(
-//     vector<vector<int>> &adj,
-//     int start_node) {
-
-//     stack<pair<int,vector<int>>> s;
-//     s.push({start_node,{}});
-//     vector<int> path;
-
-//     while (!s.empty()) {
-//         auto [node,path] = s.top();
-//         s.pop();
-//         for(int neighbour : adj[node]){
-//             if(!check_if_neighbor_in_path(adj,path,neighbour)){
-//                 path.push_back(node);
-//                 path.push_back(neighbour);
-//                 return path;
-//         }
-//     }
-//     return {};
-// }
-// // Reconstruct original path from reduced path of nodes
-// vector<int> reconstruct_path( vector<vector<Edge>> &adj,const vector<int> &reduced_path) {
-//     vector<int> full_path;
-//     for (size_t i = 0; i + 1 < reduced_path.size(); i++) {
-//         int u = reduced_path[i];
-//         int v = reduced_path[i+1];
-
-//         auto it = find_if(adj[u].begin(), adj[u].end(), [&]( Edge &e){ return e.to == v; });
-//         if (it != adj[u].end()) {
-//             full_path.push_back(u);
-//             if (it->path_len > 0)
-//                 full_path.insert(full_path.end(),
-//                     path_pool.begin() + it->path_start,
-//                     path_pool.begin() + it->path_start + it->path_len);
-//         } else {
-//             full_path.push_back(u);
-//         }
-//     }
-//     full_path.push_back(reduced_path.back());
-//     return full_path;
-// }
-
-
 
 bool dfs_util(int node, int target,int depth,
                 vector<vector<Edge>>& adj,
@@ -186,7 +80,7 @@ bool dfs_longest_path(int node, int start,
                      vector<int>& visited,
                      vector<int>& path,
                      int& max_length,
-                     vector<int>& best_path)
+                     vector<int>& best_path,int lenght = 1)
 {
     path.push_back(node);
     visited[node] = 1;
@@ -196,11 +90,7 @@ bool dfs_longest_path(int node, int start,
         visited[e.to] += 1;
     }
     
-    // Update longest path if current is longer
-    if (path.size() > max_length) {
-        max_length = path.size();
-        best_path = path;
-    }
+   
     
     bool found_extension = false;
     
@@ -208,12 +98,16 @@ bool dfs_longest_path(int node, int start,
     for (Edge e : adj[node]) {
         if (visited[e.to] == 1) { // Only visited once (as neighbor of current node)
             found_extension = true;
-            dfs_longest_path(e.to, start, adj, visited, path, max_length, best_path);
+            dfs_longest_path(e.to, start, adj, visited, path, max_length, best_path,lenght + e.weight);
         }
     }
+
+     // Update longest path if current is longer
+    if (lenght > max_length) {
+        max_length = lenght;
+        best_path = path;
+    }
     
-    // Backtrack
-    path.pop_back();
     
     // Unmark neighbors of current node
     for (Edge e : adj[node]) {
@@ -221,7 +115,9 @@ bool dfs_longest_path(int node, int start,
     }
     
     // Unmark current node
-    visited[node] = 0;
+    // Backtrack
+    path.pop_back();
+    visited[node]=1;
     
     return found_extension;
 }
@@ -399,16 +295,16 @@ PathValidationResult validate_path_detailed(const vector<int>& path,
 }
 
 int main(){
-    ios::sync_with_stdio(false);
+    ios_base::sync_with_stdio(false);
     cin.tie(0);
+    srand(time(0));
     int N,M,u,v;
-    cin >> N >> M;
+    cin >> N>>M;
 
     vector<vector<Edge>> adj(N);
     vector<int> visited(N,0);
     vector<int> path;
     path.reserve(N);
-    
     for (int i = 0; i < M; i++) {
         cin >> u >> v;
         adj[u].push_back({v,1});
@@ -419,20 +315,20 @@ int main(){
     srand(time(0));
     int max_lenght = find_longest_path(0, adj,visited, longest_path);
 
-    for(int i=0;i<10;i++){
-        int start = rand() % N;
-        fill(visited.begin(),visited.end(),0);
-        int length = find_longest_path(start, adj,visited, longest_path);
-        if(length > max_lenght){
-            max_lenght = length;
-        }
+    // for(int i=0;i<10;i++){
+  
+    //     int start = rand()%N;
+    //     fill(visited.begin(),visited.end(),0);
+    //     int length = find_longest_path(start, adj,visited, longest_path);
+    //     if(length > max_lenght){
+    //         max_lenght = length;
+    //     }
+    // }
+    cout << longest_path.size() << "\n";
+    for(int i = 0; i< (int)longest_path.size();i++){
+        if(i) cout << ' ';
+        cout << longest_path[i];
     }
-    cout << path.size();
-    for(int n: path){
-        cout << n << " ";
-    }
-    
-        
-      
+          
     return 0;
 }
