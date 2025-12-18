@@ -186,6 +186,7 @@ vector<int> find_longest_path(int start, vector<vector<Edge>>& adj, vector<int>&
     
    return result_path;
 }
+
     
 void update_visited(vector<vector<Edge>>& adj,vector<int>& path,vector<int>& visited){
     fill(visited.begin(), visited.end(), 0);
@@ -238,18 +239,28 @@ int main(){
     }
 
     vector<int> path;
-    vector<int> from_zero_path;
-
+    vector<int> longest_path;
+    
     srand(time(0));
     //auto reduced = reduceGraphWithInfo(adj);
     int start = rand()%N;
+    int longest_start;
     sort_by_bfs(adj,N);
-
-    path = find_longest_path(start, adj,visited,14);
-    update_visited(adj,path,visited);
-    from_zero_path = find_longest_path(start, adj,visited,4);   
-
-    vector<int> result = merge_paths_from_same_start(path,from_zero_path);
+    
+    for(int i=0;i<10;i++){
+        //int start = getRandomActiveNode(adj);
+        start = rand()%N;
+        fill(visited.begin(),visited.end(),0);
+        path = find_longest_path(start, adj,visited,1);
+        if(path.size() > longest_path.size()){
+            longest_path = path;
+            longest_start = start;
+        }
+    }
+    vector<int> from_zero_path;
+    update_visited(adj,longest_path,visited);
+    from_zero_path = find_longest_path(longest_start, adj,visited,1);   
+    vector<int> result = merge_paths_from_same_start(longest_path,from_zero_path);
 
     cout << result.size() << "\n";
     for(int i = 0; i< (int)result.size();i++){
