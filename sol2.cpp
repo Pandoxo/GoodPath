@@ -243,6 +243,92 @@ vector<int> merge_paths_from_same_start(const vector<int> &path1, const vector<i
     return result;
 }
 
+void dfs_blind_util(int &node,
+                    vector<vector<Edge>> &adj,
+                    vector<int> &visited,
+                    vector<bool> &was_in_path,
+                    vector<int> &path,
+                    int &max_length,
+                    vector<int> &best_path,
+                    int lenght = 1)
+{
+    // Check if time limit exceeded
+
+    path.push_back(node);
+    visited[node] = 1;
+    was_in_path[node] = true;
+
+    // Mark all neighbors of current node as visited
+    for (Edge e : adj[node])
+    {
+        visited[e.to] += 1;
+    }
+
+    // Try to extend path to unvisited neighbors
+    for (Edge e : adj[node])
+    {
+        if (visited[e.to] == 1 && !was_in_path[e.to])
+        { // Only visited once (as neighbor of current node)
+            dfs_blind_util(e.to, adj, visited, was_in_path, path, max_length, best_path, lenght + e.weight);
+        }
+    }
+
+    // Update longest path if current is longer
+    if (lenght > max_length)
+    {
+        max_length = lenght;
+        best_path = path;
+    }
+
+    // Backtrack
+    // Unmark neighbors of current node
+    for (Edge e : adj[node])
+    {
+        visited[e.to] -= 1;
+    }
+
+    // Unmark current node
+    path.pop_back();
+
+    visited[node] = 1;
+}
+
+// Wrapper function to find longest path starting from a given node
+vector<int> dfs_blind(int start, vector<vector<Edge>> &adj, vector<int> &visited)
+{
+    int max_length = 0;
+    vector<int> result_path;
+    vector<int> path;
+    vector<bool> was_in_path(adj.size(), false);
+    dfs_blind_util(start, adj, visited, was_in_path, path, max_length, result_path);
+
+    return result_path;
+}
+
+vector<int> dfs_blind_extend(int start, vector<vector<Edge>> &adj, vector<int> &path, vector<int> &visited)
+{
+    int max_length = 0;
+    vector<int> result_path;
+    vector<int> new_path;
+    vector<bool> was_in_path(adj.size(), false);
+    for (int node : path)
+        was_in_path[node] = true;
+
+    dfs_blind_util(start, adj, visited, was_in_path, new_path, max_length, result_path);
+
+    return result_path;
+}
+
+void shuffle_adj(vector<vector<Edge>> &adj)
+{
+    std::random_device rd;
+    std::mt19937 gen(rd());
+    for (vector<Edge> &neighbours : adj)
+    {
+        shuffle(neighbours.begin(), neighbours.end(), gen);
+    }
+}
+
 int main()
 {
     ios_base::sync_with_stdio(false);
@@ -262,30 +348,49 @@ int main()
 
     vector<int> path;
     vector<int> longest_path;
+    vector<int> from_zero_path;
 
     srand(time(0));
     // auto reduced = reduceGraphWithInfo(adj);
-    int start = rand() % N;
+    int start;
     int longest_start;
-    sort_by_bfs(adj, start, N);
 
     for (int i = 0; i < 10; i++)
+    {
+        start = rand() % N;
+        shuffle_adj(adj);
+        path = dfs_blind(start, adj, visited);
+        fill(visited.begin(), visited.end(), 0);
+        update_visited(adj, path, visited);
+
+        from_zero_path = dfs_blind_extend(start, adj, path, visited);
+        path = merge_paths_from_same_start(path, from_zero_path);
+        if (path.size() > longest_path.size())
+        {
+            longest_path = path;
+        }
+    }
+    fill(visited.begin(), visited.end(), 0);
+    for (int i = 0; i < 8; i++)
     {
         // int start = getRandomActiveNode(adj);
         start = rand() % N;
         sort_by_bfs(adj, start, N);
         fill(visited.begin(), visited.end(), 0);
         path = find_longest_path(start, adj, visited, 1);
+
+        fill(visited.begin(), visited.end(), 0);
+        update_visited(adj, path, visited);
+        // dfs from the start in other direction
+        from_zero_path = find_longest_path(start, adj, visited, 1);
+        path = merge_paths_from_same_start(path, from_zero_path);
         if (path.size() > longest_path.size())
         {
             longest_path = path;
             longest_start = start;
         }
     }
-    vector<int> from_zero_path;
-    update_visited(adj, longest_path, visited);
-    from_zero_path = find_longest_path(longest_start, adj, visited, 1);
-    vector<int> result = merge_paths_from_same_start(longest_path, from_zero_path);
+    vector<int> result = longest_path;
 
     cout << result.size() << "\n";
     for (int i = 0; i < (int)result.size(); i++)
